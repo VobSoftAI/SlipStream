@@ -1,0 +1,409 @@
+/* Claude Reading-Place Bookmarks — sidebar
+   Quiet panel pinned to the right edge. Uses claude.ai's general visual
+   register (warm neutrals, modest type) so it doesn't fight the host UI. */
+
+#crpb-sidebar {
+  position: fixed;
+  top: 80px;
+  right: 16px;
+  width: 260px;
+  max-height: calc(100vh - 100px);
+  background: rgba(252, 250, 245, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: #2a2722;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: width 0.18s ease, max-height 0.18s ease;
+}
+
+#crpb-sidebar.crpb-collapsed {
+  width: 36px;
+  max-height: 190px; /* toggle + 4 nav tokens */
+  overflow: hidden;
+}
+
+#crpb-sidebar.crpb-collapsed .crpb-list,
+#crpb-sidebar.crpb-collapsed .crpb-empty,
+#crpb-sidebar.crpb-collapsed .crpb-title,
+#crpb-sidebar.crpb-collapsed .crpb-clear-btn,
+#crpb-sidebar.crpb-collapsed .crpb-sidecar-toggle {
+  display: none;
+}
+
+.crpb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 6px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.crpb-title {
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #6a625a;
+}
+
+.crpb-clear-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #b0a89e;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.crpb-clear-btn:hover {
+  background: rgba(200, 60, 60, 0.08);
+  color: #c0392b;
+}
+
+.crpb-toggle {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  position: relative;
+  padding: 0;
+}
+
+.crpb-toggle:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.crpb-toggle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid #6a625a;
+  border-bottom: 1.5px solid #6a625a;
+  transform: translate(-30%, -55%) rotate(-45deg);
+}
+
+#crpb-sidebar.crpb-collapsed .crpb-toggle::before {
+  transform: translate(-70%, -55%) rotate(135deg);
+}
+
+.crpb-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 33vh;
+}
+
+.crpb-empty {
+  padding: 14px 14px 16px;
+  font-size: 12px;
+  color: #8a8278;
+  line-height: 1.45;
+}
+
+.crpb-item {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.crpb-item:last-child {
+  border-bottom: none;
+}
+
+
+.crpb-title-btn {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 8px 4px 8px 12px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+  border-radius: 0;
+}
+
+.crpb-title-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.crpb-b-btn {
+  width: 28px;
+  border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.05);
+  background: transparent;
+  cursor: pointer;
+  color: #8a8278;
+  font-size: 14px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.crpb-b-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: #2a2722;
+}
+
+
+.crpb-remove-btn {
+  width: 22px;
+  border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.05);
+  background: transparent;
+  cursor: pointer;
+  color: #b0a89e;
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.crpb-remove-btn:hover {
+  background: rgba(200, 60, 60, 0.08);
+  color: #c0392b;
+}
+
+
+/* Bookmark type badge in sidebar list */
+.crpb-bm-icon {
+  display: inline-block;
+  font-size: 10px;
+  font-style: normal;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 5px;
+  flex-shrink: 0;
+  vertical-align: middle;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.crpb-bm-icon-mark {
+  background: rgba(46, 125, 79, 0.13);
+  color: #1e6b3f;
+  border: 1px solid rgba(46, 125, 79, 0.28);
+}
+
+.crpb-bm-icon-reply {
+  background: rgba(45, 95, 166, 0.12);
+  color: #1e4f9e;
+  border: 1px solid rgba(45, 95, 166, 0.25);
+}
+
+/* ── Sidecar toggle button in header ──────────────────────────────── */
+
+.crpb-sidecar-toggle {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 5px;
+  margin-left: auto;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.crpb-sidecar-toggle:hover {
+  color: #4a7c59;
+  background: rgba(74, 124, 89, 0.08);
+}
+
+.crpb-sidecar-toggle.crpb-sidecar-active {
+  color: #4a7c59;
+  background: rgba(74, 124, 89, 0.12);
+  border-color: rgba(74, 124, 89, 0.3);
+}
+
+/* ── Floating sidecar action buttons on text selection ─────────────── */
+
+.crpb-sidecar-btns {
+  display: none;
+  position: fixed;
+  z-index: 2147483647;
+  gap: 4px;
+  background: rgba(252, 250, 245, 0.97);
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  border-radius: 6px;
+  padding: 4px 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.10);
+  backdrop-filter: blur(6px);
+}
+
+.crpb-sidecar-btns.crpb-sidecar-visible {
+  display: flex;
+}
+
+.crpb-sidecar-action {
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  color: #2a2722;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 8px;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.crpb-sidecar-action:hover {
+  background: rgba(74, 124, 89, 0.12);
+  color: #4a7c59;
+  border-color: rgba(74, 124, 89, 0.3);
+}
+
+/* ── Feedback toast ─────────────────────────────────────────────────── */
+
+.crpb-sidecar-feedback {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10002;
+  background: #2a2722;
+  color: #fff;
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  animation: crpb-fadein 0.15s ease;
+}
+
+@keyframes crpb-fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Restored bookmarks (from previous session) */
+.crpb-item-restored .crpb-title-btn {
+  opacity: 0.65;
+  font-style: italic;
+}
+.crpb-item-restored .crpb-title-btn:hover {
+  opacity: 1.0;
+}
+
+/* ── Nav arrows: bookmark recency walk + positional turn stepping ──── */
+
+.crpb-nav {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.crpb-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.10);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.crpb-nav-btn {
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 22px;
+  line-height: 1;
+  color: #2a2722;
+  flex-shrink: 0;
+}
+
+.crpb-nav-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Bookmark arrows are primary; turn arrows quieter */
+.crpb-nav-bm { font-size: 11px; font-weight: 600; }
+.crpb-nav-turn { font-size: 12px; color: #8a8278; }
+
+/* Collapsed: vertical five-token stack (expand toggle + 4 arrows) */
+#crpb-sidebar.crpb-collapsed .crpb-header {
+  border-bottom: none;
+  justify-content: center;
+  padding: 8px 0 2px;
+}
+
+#crpb-sidebar.crpb-collapsed .crpb-nav {
+  flex-direction: column;
+  align-items: center;
+  border-bottom: none;
+  padding: 2px 0 8px;
+}
+
+#crpb-sidebar.crpb-collapsed .crpb-nav-sep {
+  width: 14px;
+  height: 1px;
+  margin: 3px 0;
+}
+
+/* End-of-walk feedback */
+@keyframes crpb-nav-bump {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-3px); }
+  60% { transform: translateX(3px); }
+}
+
+#crpb-sidebar.crpb-nav-bump {
+  animation: crpb-nav-bump 0.25s ease;
+}
+
+/* Dark mode (claude.ai's dark theme uses prefers-color-scheme) */
+@media (prefers-color-scheme: dark) {
+  #crpb-sidebar {
+    background: rgba(38, 35, 32, 0.96);
+    border-color: rgba(255, 255, 255, 0.08);
+    color: #e8e3db;
+  }
+  .crpb-title { color: #a39c92; }
+  .crpb-empty { color: #8a8278; }
+  .crpb-clear-btn { color: #6a625a; }
+  .crpb-clear-btn:hover { background: rgba(200, 60, 60, 0.15); color: #e05c4a; }
+  .crpb-toggle:hover { background: rgba(255, 255, 255, 0.06); }
+  .crpb-toggle::before { border-color: #a39c92; }
+  .crpb-item { border-color: rgba(255, 255, 255, 0.05); }
+  .crpb-title-btn:hover { background: rgba(255, 255, 255, 0.05); }
+  .crpb-b-btn { border-left-color: rgba(255, 255, 255, 0.05); color: #8a8278; }
+  .crpb-b-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); color: #e8e3db; }
+  .crpb-remove-btn { border-left-color: rgba(255, 255, 255, 0.05); color: #6a625a; }
+  .crpb-remove-btn:hover { background: rgba(200, 60, 60, 0.15); color: #e05c4a; }
+  .crpb-bm-icon-mark  { background: rgba(74, 180, 110, 0.15); color: #5ecb84; border-color: rgba(74, 180, 110, 0.3); }
+  .crpb-bm-icon-reply { background: rgba(90, 145, 255, 0.15); color: #7aabff; border-color: rgba(90, 145, 255, 0.3); }
+  .crpb-nav { border-color: rgba(255, 255, 255, 0.05); }
+  .crpb-nav-btn { border-color: rgba(255, 255, 255, 0.10); color: #e8e3db; }
+  .crpb-nav-btn:hover { background: rgba(255, 255, 255, 0.06); }
+  .crpb-nav-turn { color: #8a8278; }
+  .crpb-nav-sep { background: rgba(255, 255, 255, 0.10); }
+}
