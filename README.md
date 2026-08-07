@@ -46,14 +46,14 @@ It's a deliberate convention, not an accident of how the feature got built.
 2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the folder.
 3. Open claude.ai. The macro buttons appear above the composer; the bookmark rail appears as a thin strip on the right edge.
 
-Also works — sidebar/bookmark features only, not the composer macros — on gemini.google.com and chatgpt.com/chat.openai.com. See "Scope" below.
+Also works, composer macros included, on gemini.google.com and chatgpt.com/chat.openai.com. See "Scope" below.
 
 ## Scope
 
-The composer macros are **Claude-only** right now. They were built against Claude's specific composer (a ProseMirror editor with a fairly stable set of selectors); Gemini and ChatGPT have their own composer implementations that would need their own testing, not just a selector swap. The sidebar/bookmark/reply/navigation feature already works across all three sites, since it only needs to read the page, not drive a specific input widget reliably enough to auto-send.
-
-If Claude-only stops being enough, the right shape is multi-site everywhere at once, not a partial matrix — see the site-adapter boundary already in the code (`findInput`/`findSubmit`/`SITE`) if you pick this up.
+Both the composer macros and the sidebar/bookmark/reply/navigation feature work across all three sites — Claude, ChatGPT, and Gemini. Each site has its own composer implementation, so a shared site-adapter boundary (`findInput`/`findSubmit`/`SITE`) isolates the per-site quirks: ChatGPT submits via a synthetic Enter keypress rather than a button click, and each site's composer gets anchored to a different DOM landmark since none of them expose the same structure. If a fourth site gets added, that boundary is where its adapter goes.
 
 ## What this isn't
 
 No cross-device sync, no cloud bookmark storage, no telemetry, no "sign in to save your bookmarks." Everything is local to the browser profile you installed it in. If you clear extension storage or use a different profile, you start fresh.
+
+Making a bookmark does dispatch a plain DOM `CustomEvent` (`crpb-bookmark`) on the page with no listener attached by default — a documented integration point for anyone who wants another extension to react to it, not a hidden network call. With nothing listening, it's a no-op: nothing leaves the browser.

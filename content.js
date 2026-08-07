@@ -466,6 +466,15 @@
     while (bookmarks.length > MAX_BOOKMARKS) bookmarks.pop();
     navCursor = -1;
     renderSidebar();
+
+    // Outward-only signal, never a dependency (Tod/Tab-ruled 2026-08-07):
+    // a plain DOM CustomEvent, the same contract the older
+    // claude-navigation-sidebar extension used. ai-chat-capture already
+    // listens for this and posts it to ringleader if it happens to be
+    // installed alongside this extension -- if it isn't, this is a no-op.
+    // Nothing in this toolkit's own behavior may ever come to depend on
+    // something being on the other end.
+    document.dispatchEvent(new CustomEvent('crpb-bookmark', { detail: { text: selection.text } }));
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -752,9 +761,61 @@
 
   let _claudeSendScheduled = false;
 
+  // Per-site submit strategy (2026-08-07, Tab-suggested, replacing an
+  // earlier timeout-based fallback): confirmed live that ChatGPT's real
+  // DOM matches none of SUBMIT_SELECTORS, so a button-first approach paid
+  // a fixed ~1.5s latency tax on every single ChatGPT send before ever
+  // reaching the keyboard path -- not an edge case there, the ONLY path.
+  // Declaring it up front means ChatGPT sends immediately via keyboard,
+  // no wasted retries; Claude keeps its button-click-with-retry, which is
+  // needed there for the disabled/mid-generation state a keydown can't
+  // detect. Unlisted sites default to 'button' -- the safer of the two
+  // when a new one's real behavior isn't confirmed yet.
+  const SUBMIT_STRATEGY = { chatgpt: 'keyboard' };
+  function _submitStrategyFor(site) { return SUBMIT_STRATEGY[site] || 'button'; }
+
+  // Retries the keydown, not fire-once (2026-08-07, Tab-flagged: a single
+  // dispatch that doesn't take -- composer not focused, event swallowed --
+  // never gets a second chance). BUT found live the same day, in a worse
+  // form than predicted: on a site where the synthetic Enter isn't treated
+  // as submit, the composer's own JS may insert a literal newline instead
+  // -- so retrying blindly for 20 minutes at 600ms doesn't just fail
+  // quietly, it appends ~2000 newlines to the composer (observed as the
+  // textarea "expanding like mad"). Growing composer length is PROOF the
+  // strategy isn't working on this site, not a reason to keep trying --
+  // abort immediately on that signal, and cap total attempts hard regardless
+  // (a few seconds of retrying covers "event was swallowed once"; it does
+  // not need twenty minutes to do that).
+  function _keyboardSendLoop(deadline, attempt, lastLength) {
+    attempt = attempt || 0;
+    const MAX_ATTEMPTS = 5;
+    const editor = findInput();
+    if (!editor) return;
+    const len = editor.textContent.length;
+    if (!editor.textContent.trim()) return; // sent, or nothing left to send
+    if (lastLength != null && len > lastLength) {
+      console.warn('[CCT] Keyboard submit is growing the composer instead of clearing it — aborting (site likely treats Enter as newline, not submit)');
+      return;
+    }
+    if (attempt >= MAX_ATTEMPTS || Date.now() >= deadline) {
+      console.warn('[CCT] Keyboard submit never cleared the composer — giving up after', attempt, 'attempts');
+      return;
+    }
+    editor.focus();
+    editor.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13,
+      bubbles: true, cancelable: true,
+    }));
+    setTimeout(() => _keyboardSendLoop(deadline, attempt + 1, len), 600);
+  }
+
   function _doClaudeSend() {
     setTimeout(() => {
       _claudeSendScheduled = false;
+      if (_submitStrategyFor(SITE) === 'keyboard') {
+        _keyboardSendLoop(Date.now() + 20 * 60 * 1000);
+        return;
+      }
       let attempts = 0;
       function trySend() {
         const sendBtn = findSubmit();
@@ -768,15 +829,15 @@
               setTimeout(trySend, 150);
             }
           }, 1500);
-        } else {
-          attempts++;
-          if (attempts >= 8000) {
-            console.warn('[CCT] Send button never became clickable in 20min — giving up');
-            _claudeSendScheduled = false;
-            return;
-          }
-          setTimeout(trySend, 150);
+          return;
         }
+        attempts++;
+        if (attempts >= 8000) {
+          console.warn('[CCT] Send button never became clickable in 20min — giving up');
+          _claudeSendScheduled = false;
+          return;
+        }
+        setTimeout(trySend, 150);
       }
       trySend();
     }, 800);
@@ -795,9 +856,28 @@
     document.execCommand('insertText', false, text);
   }
 
+  // Stale-selection hazard (Tod/Tab-ruled 2026-08-07): a browser selection
+  // persists until the user clicks elsewhere, so it can silently outlive
+  // the moment it was made -- select a paragraph, scroll away, type a new
+  // question, hit a macro button, and it quotes the old selection instead
+  // of answering what was just typed, with nothing indicating it happened.
+  // Visibility rather than recency: ChatGPT's own native selection-reply
+  // button already disappears once the selection scrolls off screen, so
+  // matching that is a pattern users are already trained on rather than a
+  // timer whose threshold would need explaining or tuning.
+  function _selectionVisible() {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return false; // collapsed
+    return rect.bottom > 0 && rect.top < window.innerHeight &&
+           rect.right > 0 && rect.left < window.innerWidth;
+  }
+
   function _selectedQuote() {
     const text = (window.getSelection()?.toString() || '').trim();
     if (!text) return null;
+    if (!_selectionVisible()) return null;
     return '> ' + text.replace(/\n/g, '\n> ') + '\n\n';
   }
 
@@ -806,9 +886,12 @@
   let currentLevel = null;
   const _stampedThisConv = new Set();
 
+  // Multi-site fix (2026-08-07): was Claude-only (/chat/<id>), which meant
+  // the verbosity level would key off a null id on Gemini/ChatGPT and
+  // silently persist to the wrong place, or nowhere. extractChatId already
+  // handles all three site URL shapes -- reuse it instead of duplicating.
   function _convId() {
-    const m = location.pathname.match(/\/chat\/([0-9a-f-]+)/i);
-    return m ? m[1] : null;
+    return extractChatId(location.href);
   }
   function _keyLevel(id) { return `cctVerbosityLevel:${id}`; }
   function _keyStamped(id) { return `cctVerbosityStamped:${id}`; }
@@ -855,15 +938,17 @@
     _stampForSend();
     setTimeout(() => { _stampingGuard = false; }, 300);
   }
+  // Multi-site (2026-08-07): was Claude-only. findInput/findSubmit are
+  // already per-site adapters (see RECEIVER section above), so nothing
+  // else here is Claude-specific -- the guard was just never removed when
+  // the buttons were Claude-only for other reasons.
   document.addEventListener('keydown', (e) => {
-    if (SITE !== 'claude') return;
     if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
     const editor = findInput();
     if (!editor || !editor.contains(e.target)) return;
     _guardedStamp();
   }, true);
   document.addEventListener('click', (e) => {
-    if (SITE !== 'claude') return;
     const sendBtn = findSubmit();
     if (!sendBtn || !sendBtn.contains(e.target)) return;
     _guardedStamp();
@@ -871,6 +956,15 @@
 
   function _makeMacroBtn(label, title) {
     const b = document.createElement('button');
+    // Found live 2026-08-07, real root cause of the ChatGPT label-drop bug:
+    // an unset <button> defaults to type="submit", and the row now lives
+    // inside the composer's <form> (needed to anchor above it). Clicking it
+    // was firing the browser's OWN native form submit *in addition to* our
+    // click handler, and ChatGPT's real submit handler won that race,
+    // sending its own pre-insertion state before our execCommand mutation
+    // was recognized. type="button" removes that second, uncontrolled
+    // trigger entirely -- our explicit send logic becomes the only path.
+    b.type = 'button';
     b.textContent = label;
     if (title) b.title = title;
     b.style.cssText = [
@@ -891,10 +985,20 @@
   function _buildMacroRow() {
     const container = document.createElement('div');
     container.id = 'cct-macro-buttons';
+    // Gemini's composer measures narrower than Claude/ChatGPT's (660px vs
+    // 768px), which wrapped the row to two lines -- Tod, 2026-08-07: prefers
+    // it stay on one line, expanding a bit past the composer's own width
+    // into the page's side margins rather than wrapping, plus tighter
+    // spacing as extra headroom.
+    const isGemini = SITE === 'gemini';
     container.style.cssText = [
-      'display:flex', 'gap:6px', 'flex-wrap:wrap', 'align-items:center',
+      'display:flex', 'gap:' + (isGemini ? '4px' : '6px'), 'flex-wrap:wrap', 'align-items:center',
+      'justify-content:center',
+      isGemini ? 'width:calc(100% + 80px)' : '',
+      isGemini ? 'margin-left:-40px' : '',
+      isGemini ? 'margin-right:-40px' : '',
       'padding:4px 2px', 'font-family:system-ui,sans-serif', 'font-size:11px',
-    ].join(';');
+    ].filter(Boolean).join(';');
 
     INTENT_VERBS.forEach(({ label: verb, title }) => {
       const b = _makeMacroBtn(verb, title);
@@ -957,14 +1061,55 @@
     return container;
   }
 
+  // Inline sibling, sized to the composer's own column (Tod-ruled
+  // 2026-08-07, superseding an earlier fixed-position/full-viewport-width
+  // attempt): that version measured 1280px wide on ChatGPT and looked like
+  // a screen-wide black bar, and on a live tab it visibly drifted away from
+  // the composer -- floating fixed-position elements need constant
+  // repositioning to track their anchor, and any lag between an edit and
+  // the next recompute shows up as visible drift. A sibling insertion has
+  // no such lag: the browser's own layout keeps it glued to its neighbor
+  // for free, and it naturally inherits that neighbor's width instead of
+  // the viewport's.
+  //
+  // `host` is the element to insert the row directly above. Found live
+  // 2026-08-07: [data-testid="chat-input"] is on Claude's editable div
+  // itself, not a wrapper around it, so anchoring there landed the row a
+  // few levels inside the visible white card (next to the textarea, but
+  // still inside the box) -- worked as "above the textarea", not what Tod
+  // meant by "above the box". Climbing from the editor to the nearest
+  // ancestor that actually LOOKS like the box (has its own background and
+  // rounded corners) targets what a human points at when they say "the
+  // box", regardless of where a testid happens to be attached.
+  function _visualCardHost(editor) {
+    // Climb to document.body rather than an arbitrary depth cap -- found
+    // live 2026-08-07: a fixed cap of 8 missed Gemini's card by one level,
+    // and there's no principled number to pick instead. The real bound is
+    // "stop before leaving the composer's own DOM neighborhood", not a
+    // count of hops.
+    let cur = editor;
+    while (cur && cur !== document.body) {
+      const cs = getComputedStyle(cur);
+      const hasBg = cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent';
+      const hasRadius = parseFloat(cs.borderRadius) > 0;
+      if (hasBg && hasRadius) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
+  }
+
+  function _composerHost(editor) {
+    return _visualCardHost(editor) || editor.closest('form') || editor.parentElement;
+  }
+
   function _armMacroRow() {
-    if (SITE !== 'claude') return;
     if (document.getElementById('cct-macro-buttons')) return;
     const editor = findInput();
     if (!editor) return;
-    const host = editor.closest('[data-testid="chat-input"]') || editor.parentElement;
+    const host = _composerHost(editor);
     if (!host || !host.parentElement) return;
-    host.parentElement.insertBefore(_buildMacroRow(), host);
+    const row = _buildMacroRow();
+    host.parentElement.insertBefore(row, host);
   }
 
   // ────────────────────────────────────────────────────────────────────
@@ -999,14 +1144,71 @@
     } catch { return null; }
   }
 
+  // Re-inserts the sidebar/macro row if the host page's own JS removes
+  // them (found live 2026-08-07 on ChatGPT: a foreign body-level node
+  // gets wiped a second or two after injection, correlated with a React
+  // hydration-mismatch error the page throws on load -- exact mechanism
+  // unconfirmed, but this fixes it regardless of cause). ensureSidebar and
+  // _armMacroRow are both already idempotent (check for existing DOM
+  // presence before creating), so re-calling them on removal is safe and
+  // does not double-create.
+  let _zeroSizeRecoveryAttempts = 0;
+  const ZERO_SIZE_RECOVERY_CAP = 5;
+
+  function _watchForForeignRemoval() {
+    const observer = new MutationObserver(() => {
+      if (!sidebarRoot || !document.body.contains(sidebarRoot)) {
+        ensureSidebar();
+        renderSidebar();
+      }
+      // No SITE gate: _armMacroRow is multi-site now (2026-08-07), and it
+      // already no-ops safely if findInput() can't locate a composer.
+      const macroRow = document.getElementById('cct-macro-buttons');
+      if (!macroRow) {
+        _armMacroRow();
+      } else if (macroRow.getBoundingClientRect().width === 0) {
+        // Found live on claude.ai/new (2026-08-07): the row can survive
+        // in the DOM (still attached, still passes the check above) but
+        // collapse to zero size, because it was anchored during an early,
+        // pre-hydration render and the page later swapped in the real
+        // composer around it rather than removing it outright. A missing
+        // node and a zero-size node are the same failure from the user's
+        // perspective -- reinsert against whatever the DOM looks like now.
+        //
+        // Capped (found live 2026-08-07, same night as the keyboard-submit
+        // runaway): remove() and _armMacroRow() are themselves DOM
+        // mutations, which can refire this exact observer -- if the page
+        // never settles into a state _visualCardHost is happy with, this
+        // would otherwise retry forever and peg the tab. Five attempts is
+        // enough to survive a hydration race; past that, leave it broken
+        // rather than spin.
+        if (_zeroSizeRecoveryAttempts < ZERO_SIZE_RECOVERY_CAP) {
+          _zeroSizeRecoveryAttempts++;
+          macroRow.remove();
+          _armMacroRow();
+        } else if (_zeroSizeRecoveryAttempts === ZERO_SIZE_RECOVERY_CAP) {
+          _zeroSizeRecoveryAttempts++; // only warn once
+          console.warn('[CCT] Macro row stuck at zero size after', ZERO_SIZE_RECOVERY_CAP, 'recovery attempts -- giving up, buttons will not appear on this page load');
+        }
+      }
+    });
+    // Observing documentElement with subtree:true, not just document.body
+    // with childList:true (Tab-reviewed 2026-08-07): if the removal
+    // mechanism turns out to be a body-level reset rather than a scoped
+    // reconciliation, an observer attached to body itself could be
+    // orphaned along with the node it's watching. <html> is never
+    // replaced by page content, so this survives that case too.
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   function boot() {
     ensureSidebar();
     renderSidebar();
     loadRestoredBookmarks();
-    if (SITE === 'claude') {
-      _resolveVerbosityForConv();
-      _armMacroRow();
-    }
+    // Multi-site (2026-08-07): was Claude-only.
+    _resolveVerbosityForConv();
+    _armMacroRow();
+    _watchForForeignRemoval();
 
     let _lastUrl = window.location.href;
     let boundChatId = extractChatId(window.location.href);
@@ -1018,10 +1220,8 @@
       _lastUrl = newUrl;
       const newId = extractChatId(newUrl);
 
-      if (SITE === 'claude') {
-        _resolveVerbosityForConv();
-        _armMacroRow();
-      }
+      _resolveVerbosityForConv();
+      _armMacroRow();
 
       if (newId === null) return;
 
