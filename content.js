@@ -1198,6 +1198,14 @@
     if (!host || !host.parentElement) return;
     const row = _buildMacroRow();
     host.parentElement.insertBefore(row, host);
+    // _buildMacroRow() just populated levelBtns fresh -- reflect whatever
+    // level is already known (found live 2026-08-08: _resolveVerbosityForConv()
+    // runs before this on cold load, so its _setActiveLevelButton() call landed
+    // on an empty levelBtns array and silently no-op'd; the default-to-Normal
+    // state was correct internally but never painted). Safe to call even
+    // before the async resolve settles -- it'll just repaint once currentLevel
+    // updates.
+    _setActiveLevelButton(currentLevel);
   }
 
   // ────────────────────────────────────────────────────────────────────
