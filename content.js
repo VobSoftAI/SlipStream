@@ -943,9 +943,22 @@
     const convId = _convId();
     if (convId === currentConvId) return;
     currentConvId = convId;
+    if (!convId) {
+      // Fresh "new chat" page -- no conversation id in the URL yet (found
+      // live 2026-08-08: Tod's very first message on a brand-new chat sent
+      // unstamped and unhighlighted, because the old code bailed here
+      // before ever applying the default). Nothing to persist to until a
+      // real conv id exists, but the row should still show the default
+      // rather than looking unset. _ownSend() still requires currentConvId
+      // truthy to stamp, so this message remains unstamped regardless --
+      // that first-message gap closes itself once the site assigns a real
+      // id and this function re-runs, known and separate from the paint.
+      currentLevel = DEFAULT_VERBOSITY_LEVEL;
+      _setActiveLevelButton(DEFAULT_VERBOSITY_LEVEL);
+      return;
+    }
     currentLevel = null;
     _setActiveLevelButton(null);
-    if (!convId) return;
     const result = await chrome.storage.local.get(_keyLevel(convId));
     const level = result[_keyLevel(convId)] || DEFAULT_VERBOSITY_LEVEL;
     currentLevel = level;
