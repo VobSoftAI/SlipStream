@@ -1,6 +1,6 @@
 # Claude Composer Toolkit
 
-A Chrome extension for [claude.ai](https://claude.ai) with two things I kept wanting and couldn't find in one place: one-click reply macros, and a way to find my place again in a long conversation.
+A Chrome extension for Claude, ChatGPT, Gemini, and Copilot that eliminates cut-and-paste when you're working an AI conversation: one-click reply macros instead of retyping the same request, and a way to find your place again instead of scrolling and re-selecting.
 
 No account, no server, no analytics. Everything it remembers lives in `chrome.storage.local` — your browser, your machine, nowhere else.
 
