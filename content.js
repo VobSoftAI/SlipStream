@@ -15,6 +15,14 @@
 (function () {
   'use strict';
 
+  // Tod-ruled 2026-08-08: off everywhere, private build included, until
+  // the cross-tab "sidecar" feature (Ask aside / Define send, the "Who's
+  // Listening" receiver toggle) is redesigned -- not ready to explain what
+  // happens when you interact with other tabs. A single flag here, rather
+  // than deleting the feature, keeps it a one-line flip to bring back
+  // rather than a re-diff against history.
+  const INCLUDE_SIDECAR_ASIDE = false;
+
   // ────────────────────────────────────────────────────────────────────
   // SITE DETECTION
   // ────────────────────────────────────────────────────────────────────
@@ -169,7 +177,7 @@
     });
     sidecarBtnContainer.appendChild(bmBtn);
 
-    for (const { label, prefix } of SIDECAR_PROMPTS) {
+    for (const { label, prefix } of (INCLUDE_SIDECAR_ASIDE ? SIDECAR_PROMPTS : [])) {
       const btn = document.createElement('button');
       btn.className = 'crpb-sidecar-action crpb-sidecar-dispatch';
       btn.textContent = label;
@@ -497,7 +505,7 @@
     sidebarRoot.innerHTML = `
       <div class="crpb-header">
         <span class="crpb-title">${SITE === 'claude' ? 'Reply tags' : 'Bookmarks'}</span>
-        <button class="crpb-sidecar-toggle" aria-label="Toggle sidecar receiver" title="Sidecar: receive lookups from other tabs">⊕</button>
+        ${INCLUDE_SIDECAR_ASIDE ? '<button class="crpb-sidecar-toggle" aria-label="Toggle sidecar receiver" title="Sidecar: receive lookups from other tabs">⊕</button>' : ''}
         <button class="crpb-clear-btn" aria-label="Clear all bookmarks" title="Clear all">×</button>
         <button class="crpb-toggle" aria-label="Collapse"></button>
       </div>
@@ -515,19 +523,21 @@
     document.body.appendChild(sidebarRoot);
 
     const sidecarToggle = sidebarRoot.querySelector('.crpb-sidecar-toggle');
-    chrome.runtime.sendMessage({ action: 'sidecar-status' }, (resp) => {
-      if (resp && resp.isReceiver) {
-        sidecarToggle.classList.add('crpb-sidecar-active');
-        isReceiver = true;
-      }
-    });
-    sidecarToggle.addEventListener('click', () => {
-      const active = sidecarToggle.classList.toggle('crpb-sidecar-active');
-      isReceiver = active;
-      chrome.runtime.sendMessage({
-        action: active ? 'sidecar-register' : 'sidecar-unregister',
+    if (sidecarToggle) {
+      chrome.runtime.sendMessage({ action: 'sidecar-status' }, (resp) => {
+        if (resp && resp.isReceiver) {
+          sidecarToggle.classList.add('crpb-sidecar-active');
+          isReceiver = true;
+        }
       });
-    });
+      sidecarToggle.addEventListener('click', () => {
+        const active = sidecarToggle.classList.toggle('crpb-sidecar-active');
+        isReceiver = active;
+        chrome.runtime.sendMessage({
+          action: active ? 'sidecar-register' : 'sidecar-unregister',
+        });
+      });
+    }
 
     sidebarRoot.querySelector('.crpb-toggle').addEventListener('click', () => {
       collapsed = !collapsed;
