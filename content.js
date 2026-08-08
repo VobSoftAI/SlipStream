@@ -932,6 +932,13 @@
     });
   }
 
+  // Tod-ruled 2026-08-08: default to Normal rather than no level active.
+  // Previously a fresh conversation had no level set at all, so nothing
+  // got stamped until you explicitly picked one -- now every conversation
+  // starts with an explicit (if unremarkable) choice, consistent from the
+  // first message rather than only once you've touched a button.
+  const DEFAULT_VERBOSITY_LEVEL = 'normal';
+
   async function _resolveVerbosityForConv() {
     const convId = _convId();
     if (convId === currentConvId) return;
@@ -940,11 +947,9 @@
     _setActiveLevelButton(null);
     if (!convId) return;
     const result = await chrome.storage.local.get(_keyLevel(convId));
-    const level = result[_keyLevel(convId)];
-    if (level) {
-      currentLevel = level;
-      _setActiveLevelButton(level);
-    }
+    const level = result[_keyLevel(convId)] || DEFAULT_VERBOSITY_LEVEL;
+    currentLevel = level;
+    _setActiveLevelButton(level);
   }
 
   function _stampForSend() {
@@ -959,27 +964,82 @@
     }
   }
 
-  let _stampingGuard = false;
-  function _guardedStamp() {
-    if (_stampingGuard) return;
-    _stampingGuard = true;
-    _stampForSend();
-    setTimeout(() => { _stampingGuard = false; }, 300);
+  // Own-the-send (Tod/Tab-ruled 2026-08-08, replacing the old write-and-hope
+  // _guardedStamp): the previous version wrote the stamp during the event's
+  // capturing phase and trusted the site's own send handler, firing a beat
+  // later on the same event, to pick it up -- a write-then-read race, same
+  // shape as the earlier ChatGPT type=submit bug. The macro buttons never
+  // had this problem because they own the send outright: insert, then
+  // invoke the send path themselves. This makes manual sends do the same --
+  // intercept the real send trigger, stamp, confirm the composer reflects
+  // it (bounded retries, not a blind delay), then trigger the send via
+  // _doClaudeSend(), the exact path the buttons already prove reaches all
+  // four sites. If the stamp never confirms, send anyway -- Tab's point:
+  // a message that goes out unstamped is recoverable, one that never goes
+  // out because we swallowed the user's Enter/click is not.
+  //
+  // Reentrancy: _doClaudeSend() ends up generating its own synthetic click
+  // (button-strategy sites) or synthetic keydown Enter (keyboard-strategy,
+  // _keyboardSendLoop) to actually trigger the site's send. Those re-enter
+  // these same capturing listeners. Event.isTrusted distinguishes a real
+  // user action from a script-dispatched one natively, so synthetic events
+  // fall through unowned rather than needing a hand-rolled guard flag.
+  let _ownSendInFlight = false;
+  const STAMP_CONFIRM_ATTEMPTS = 10;
+  const STAMP_CONFIRM_INTERVAL_MS = 30;
+
+  function _composerHasMarker(marker) {
+    const editor = findInput();
+    const text = editor ? editor.textContent : '';
+    return text.trimEnd().endsWith(marker);
   }
+
+  function _triggerRealSend() {
+    if (!_claudeSendScheduled) { _claudeSendScheduled = true; _doClaudeSend(); }
+  }
+
+  function _confirmStampThenSend(attempt) {
+    attempt = attempt || 0;
+    const marker = `;;verbosity:${currentLevel};;`;
+    if (_composerHasMarker(marker)) {
+      _ownSendInFlight = false;
+      _triggerRealSend();
+      return;
+    }
+    if (attempt === 0) _stampForSend();
+    if (attempt >= STAMP_CONFIRM_ATTEMPTS) {
+      console.warn('[CCT] Verbosity stamp did not land within', STAMP_CONFIRM_ATTEMPTS * STAMP_CONFIRM_INTERVAL_MS, 'ms -- sending unstamped rather than blocking the message');
+      _ownSendInFlight = false;
+      _triggerRealSend();
+      return;
+    }
+    setTimeout(() => _confirmStampThenSend(attempt + 1), STAMP_CONFIRM_INTERVAL_MS);
+  }
+
+  function _ownSend(e) {
+    if (_ownSendInFlight) return;
+    if (!currentLevel || !currentConvId) return; // nothing to stamp -- let native send proceed
+    _ownSendInFlight = true;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    _confirmStampThenSend();
+  }
+
   // Multi-site (2026-08-07): was Claude-only. findInput/findSubmit are
   // already per-site adapters (see RECEIVER section above), so nothing
-  // else here is Claude-specific -- the guard was just never removed when
-  // the buttons were Claude-only for other reasons.
+  // else here is Claude-specific.
   document.addEventListener('keydown', (e) => {
+    if (!e.isTrusted) return; // our own synthetic Enter from _keyboardSendLoop
     if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
     const editor = findInput();
     if (!editor || !editor.contains(e.target)) return;
-    _guardedStamp();
+    _ownSend(e);
   }, true);
   document.addEventListener('click', (e) => {
+    if (!e.isTrusted) return; // our own synthetic click from _doClaudeSend's trySend()
     const sendBtn = findSubmit();
     if (!sendBtn || !sendBtn.contains(e.target)) return;
-    _guardedStamp();
+    _ownSend(e);
   }, true);
 
   function _makeMacroBtn(label, title) {
