@@ -33,7 +33,9 @@ Nine buttons above the message box — five intent verbs, then a divider, then f
 
 Only the first case waits for you. The other two send right away — there's no confirmation step, since the whole point is one click instead of several.
 
-**Verbosity is a mode, not a one-shot.** Clicking a level doesn't just affect your next message — it persists for the rest of that conversation, and every message you send afterward gets silently stamped with a request to match it, until you pick a different level or start a new chat. This surprises people the first time: if a reply keeps coming back terse long after you meant to ask one terse question, check whether a verbosity level is still active.
+**Verbosity is a mode, not a one-shot.** Clicking a level doesn't just affect your next message — it's meant to persist for the rest of that conversation, stamping every message you send afterward with a request to match it, until you pick a different level or start a new chat.
+
+> **Known issue:** the stamp currently doesn't reach the sent message on a real button-click send — confirmed via direct testing, not yet fixed. The level button still shows as active and the intent above is correct; the actual stamping mechanism is what's broken. Don't rely on it persisting until this note is removed.
 
 ### Reply / bookmark sidebar
 
