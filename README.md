@@ -27,6 +27,8 @@ Nine buttons above the message box — five intent verbs, then a divider, then f
 
 **Empty vs. non-empty composer** changes what a verb button does, independent of the referent rule above:
 
+![Clicking Explain on an empty composer inserts "Explain: " and waits, rather than sending](docs/empty-composer-insert.png)
+
 - **Composer is empty, no selection** → inserts a label (`Explain: `) and stops. It's a prompt starter, not a send — type your actual question after it.
 - **Composer already has text, no selection** → prepends the label and sends immediately. Useful mid-thought: type your question, then click a verb instead of typing the verb yourself.
 - **A page selection exists** (either composer state) → quotes the selection and sends immediately, per the referent rule above.
@@ -41,13 +43,12 @@ Only the first case waits for you. The other two send right away — there's no 
 
 Select text in a response to get a small floating toolbar right above it:
 
-![The floating selection toolbar — Reply, Bookmark, Ask aside, Define — appearing above a highlighted passage](docs/selection-popup.png)
+![The floating selection toolbar — Reply and Bookmark — appearing above a highlighted passage](docs/selection-popup.png)
 
 - **Reply** — quotes the selection into the composer as your next message's context.
 - **Bookmark** — remembers your place without composing anything, so you can jump back to it.
-- **Ask aside / Define** — sends the selection to another registered "sidecar" tab for a quick lookup, without derailing the conversation you're in.
 
-**In-flow versus out-of-flow, on purpose.** The composer's Explain button and the floating toolbar's Ask aside button do almost the same thing — ask about something — but land in different places, and the names say so. Explain asks *here*, in the conversation you're already having; Ask aside asks *elsewhere*, in a separate tab, so a tangent doesn't derail the thread you're actually following. Same underlying action, different destination, named for the destination rather than the action, since "explain" alone doesn't say where the question goes.
+> **Ask aside / Define, and the cross-tab "sidecar" receiver toggle, are currently disabled** pending a redesign of how sending a selection to another open tab should actually work. The underlying send/receive plumbing is still in the code, just not exposed — turning it back on later is a one-line flip, not a rebuild.
 
 The sidebar itself (collapsed to a thin rail by default, click to expand) lists everything you've bookmarked or replied to in the current chat, newest first, and lets you walk through them (▲▼) or step turn-by-turn through the conversation (↑↓) regardless of what's bookmarked:
 
