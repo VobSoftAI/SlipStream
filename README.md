@@ -37,7 +37,9 @@ Only the first case waits for you. The other two send right away — there's no 
 
 ### Reply / bookmark sidebar
 
-Select text in a response to get a small floating toolbar:
+Select text in a response to get a small floating toolbar right above it:
+
+![The floating selection toolbar — Reply, Bookmark, Ask aside, Define — appearing above a highlighted passage](docs/selection-popup.png)
 
 - **Reply** — quotes the selection into the composer as your next message's context.
 - **Bookmark** — remembers your place without composing anything, so you can jump back to it.
