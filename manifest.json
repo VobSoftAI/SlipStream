@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Claude Composer Toolkit",
+  "name": "SlipStream",
   "version": "0.1.0",
-  "description": "One-click reply macros (Explain/Clarify/Elaborate/Expand/Condense) that work on a page selection or Claude's own last reply, plus a bookmark/reply sidebar for finding your place again. No account, no server — everything stays in your browser.",
+  "description": "No cut and paste. Low-friction, one-click reply macros (Explain/Clarify/Elaborate/Expand/Condense) that work on a page selection or the assistant's own last reply, plus a bookmark/reply sidebar for finding your place again. No account, no server — everything stays in your browser.",
   "permissions": ["tabs", "storage"],
   "content_scripts": [
     {

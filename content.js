@@ -1,4 +1,4 @@
-// Claude Composer Toolkit
+// SlipStream
 // Two independent pieces sharing one page, both multi-site (Claude, Gemini,
 // ChatGPT, Copilot/M365):
 //  1. Reply/bookmark sidebar — select text in a response, bookmark your

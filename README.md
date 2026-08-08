@@ -1,6 +1,6 @@
-# Claude Composer Toolkit
+# SlipStream
 
-A Chrome extension for Claude, ChatGPT, Gemini, and Copilot that eliminates cut-and-paste when you're working an AI conversation: one-click reply macros instead of retyping the same request, and a way to find your place again instead of scrolling and re-selecting.
+No cut and paste. A Chrome extension for Claude, ChatGPT, Gemini, and Copilot with low-friction, one-click reply macros instead of retyping the same request, and a way to find your place again instead of scrolling and re-selecting.
 
 No account, no server, no analytics. Everything it remembers lives in `chrome.storage.local` — your browser, your machine, nowhere else.
 
