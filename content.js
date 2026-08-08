@@ -1,14 +1,14 @@
 // Claude Composer Toolkit
-// Two independent pieces sharing one page:
+// Two independent pieces sharing one page, both multi-site (Claude, Gemini,
+// ChatGPT, Copilot/M365):
 //  1. Reply/bookmark sidebar — select text in a response, bookmark your
-//     place or quote it into a reply, jump back later. Multi-site (Claude,
-//     Gemini, ChatGPT).
+//     place or quote it into a reply, jump back later.
 //  2. Composer macro buttons — one-click reply macros above the composer:
 //     Explain/Clarify/Elaborate a selection or your last request, Expand/
-//     Condense a selection or Claude's own last reply, plus a persistent
-//     per-conversation verbosity level. Claude-only (see the SITE==='claude'
-//     guard at the bottom) — the ProseMirror composer this drives has no
-//     Gemini/ChatGPT equivalent wired up yet.
+//     Condense a selection or the assistant's own last reply, plus a
+//     persistent per-conversation verbosity level. Each site's composer
+//     quirks are isolated behind SITE_SEL/INPUT_SELECTORS/SUBMIT_STRATEGY
+//     rather than branching throughout.
 // Everything lives in chrome.storage.local. No account, no server, no
 // network calls at all.
 
@@ -21,6 +21,7 @@
 
   const SITE = location.hostname.includes('gemini.google.com') ? 'gemini'
              : (location.hostname.includes('chatgpt.com') || location.hostname.includes('chat.openai.com')) ? 'chatgpt'
+             : location.hostname.includes('m365.cloud.microsoft') ? 'copilot'
              : 'claude';
 
   // ────────────────────────────────────────────────────────────────────
@@ -46,6 +47,10 @@
     chatgpt: {
       ASSISTANT_TURN: ['[data-message-author-role="assistant"]'],
       USER_MESSAGE: ['[data-message-author-role="user"]'],
+    },
+    copilot: {
+      ASSISTANT_TURN: ['[data-testid="copilot-message-div"]'],
+      USER_MESSAGE: ['[data-testid="chatQuestion"]'],
     },
   };
 
@@ -220,6 +225,7 @@
   const INPUT_SELECTORS = [
     '[data-testid="chat-input"] .ProseMirror',
     'div[contenteditable="true"].ProseMirror',
+    '#m365-chat-editor-target-element',
     'fieldset div[contenteditable="true"]',
     'div[contenteditable="true"]',
     'textarea',
@@ -846,6 +852,18 @@
   function _insertAtCursorEdge(text, atStart) {
     const editor = findInput();
     if (!editor) return;
+    // Copilot's editor is Lexical-backed and needs a real click sequence to
+    // establish its internal editing state -- .focus() alone leaves
+    // execCommand('insertText') silently no-op (found live 2026-08-07 via
+    // direct testing: text stayed empty through a full second with focus()
+    // alone, worked once mousedown/mouseup/click were dispatched first).
+    if (SITE === 'copilot') {
+      const rect = editor.getBoundingClientRect();
+      const opts = { bubbles: true, cancelable: true, clientX: rect.left + 10, clientY: rect.top + 10 };
+      editor.dispatchEvent(new MouseEvent('mousedown', opts));
+      editor.dispatchEvent(new MouseEvent('mouseup', opts));
+      editor.dispatchEvent(new MouseEvent('click', opts));
+    }
     editor.focus();
     const selection = window.getSelection();
     const range = document.createRange();
@@ -1139,6 +1157,7 @@
       const m = SITE === 'claude' ? p.match(/\/chat\/([^/]+)/)
               : SITE === 'gemini' ? p.match(/\/app\/([^/]+)/)
               : SITE === 'chatgpt' ? p.match(/\/c\/([^/]+)/)
+              : SITE === 'copilot' ? p.match(/\/chat\/conversation\/([^/]+)/)
               : null;
       return m ? m[1] : null;
     } catch { return null; }

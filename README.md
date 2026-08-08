@@ -46,11 +46,11 @@ It's a deliberate convention, not an accident of how the feature got built.
 2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the folder.
 3. Open claude.ai. The macro buttons appear above the composer; the bookmark rail appears as a thin strip on the right edge.
 
-Also works, composer macros included, on gemini.google.com and chatgpt.com/chat.openai.com. See "Scope" below.
+Also works, composer macros included, on gemini.google.com, chatgpt.com/chat.openai.com, and Microsoft 365 Copilot (m365.cloud.microsoft). See "Scope" below.
 
 ## Scope
 
-Both the composer macros and the sidebar/bookmark/reply/navigation feature work across all three sites — Claude, ChatGPT, and Gemini. Each site has its own composer implementation, so a shared site-adapter boundary (`findInput`/`findSubmit`/`SITE`) isolates the per-site quirks: ChatGPT submits via a synthetic Enter keypress rather than a button click, and each site's composer gets anchored to a different DOM landmark since none of them expose the same structure. If a fourth site gets added, that boundary is where its adapter goes.
+Both the composer macros and the sidebar/bookmark/reply/navigation feature work across all four sites — Claude, ChatGPT, Gemini, and Copilot. Each site has its own composer implementation, so a shared site-adapter boundary (`findInput`/`findSubmit`/`SITE`) isolates the per-site quirks: ChatGPT submits via a synthetic Enter keypress rather than a button click, Copilot's Lexical-based editor needs a real click sequence dispatched before it accepts programmatic text insertion, and each site's composer gets anchored to a different DOM landmark since none of them expose the same structure. If a fifth site gets added, that boundary is where its adapter goes.
 
 ## What this isn't
 

@@ -6,7 +6,7 @@
   "permissions": ["tabs", "storage"],
   "content_scripts": [
     {
-      "matches": ["https://claude.ai/*", "https://gemini.google.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "matches": ["https://claude.ai/*", "https://gemini.google.com/*", "https://chatgpt.com/*", "https://chat.openai.com/*", "https://m365.cloud.microsoft/*"],
       "js": ["content.js"],
       "css": ["sidebar.css"],
       "run_at": "document_idle"
