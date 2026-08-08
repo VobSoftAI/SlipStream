@@ -965,12 +965,25 @@
     _setActiveLevelButton(level);
   }
 
+  // Tab-caught 2026-08-08: currentConvId gated *emitting* the stamp, but it's
+  // only needed to *persist* one -- currentLevel is what the marker needs,
+  // and that's now defaulted to Normal even pre-conversation. Requiring
+  // convId here meant the very first message of any brand-new chat (no
+  // conv id yet, since the site assigns one only once that message creates
+  // it) always went out unstamped. Persistence still needs a real id, so
+  // that part stays gated; a null-convId send just skips the storage write
+  // and _stampedThisConv bookkeeping, which costs at most one redundant
+  // repeat of the full directive on the second message once the real id
+  // exists and this state resets -- cheap compared to the first message
+  // silently carrying no marker at all.
   function _stampForSend() {
-    if (!currentLevel || !currentConvId) return;
+    if (!currentLevel) return;
     const marker = `;;verbosity:${currentLevel};;`;
-    if (!_stampedThisConv.has(currentConvId)) {
-      _stampedThisConv.add(currentConvId);
-      chrome.storage.local.set({ [_keyStamped(currentConvId)]: true }).catch(() => {});
+    if (!currentConvId || !_stampedThisConv.has(currentConvId)) {
+      if (currentConvId) {
+        _stampedThisConv.add(currentConvId);
+        chrome.storage.local.set({ [_keyStamped(currentConvId)]: true }).catch(() => {});
+      }
       _insertAtCursorEdge(' ' + VERBOSITY_DIRECTIVES[currentLevel] + ' ' + marker, false);
     } else {
       _insertAtCursorEdge(' ' + marker, false);
@@ -1031,7 +1044,10 @@
 
   function _ownSend(e) {
     if (_ownSendInFlight) return;
-    if (!currentLevel || !currentConvId) return; // nothing to stamp -- let native send proceed
+    // currentConvId not required here -- see _stampForSend's comment. A
+    // brand-new chat has currentLevel (defaulted) but no convId yet, and
+    // that's exactly the message this used to let through unstamped.
+    if (!currentLevel) return; // nothing to stamp -- let native send proceed
     _ownSendInFlight = true;
     e.preventDefault();
     e.stopImmediatePropagation();
