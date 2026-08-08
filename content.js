@@ -1181,8 +1181,20 @@
   // _armMacroRow are both already idempotent (check for existing DOM
   // presence before creating), so re-calling them on removal is safe and
   // does not double-create.
-  let _zeroSizeRecoveryAttempts = 0;
-  const ZERO_SIZE_RECOVERY_CAP = 5;
+  // Bounded by elapsed time with backoff, not a fixed attempt count
+  // (Tab-reviewed 2026-08-08, replacing an earlier 5-attempt cap found
+  // live 2026-08-07): a fixed count is being tested against a variable
+  // condition -- a cold extension load takes longer to settle than a warm
+  // one, and 5 rapid-fire attempts could exhaust themselves before a slow
+  // page ever stabilizes, leaving the row permanently blank on exactly the
+  // loads that needed the most patience. Backoff (never retry more than
+  // once per interval) is what actually prevents the runaway-mutation
+  // spin the old cap was guarding against; the count was incidental.
+  let _zeroSizeRecoveryFirstSeenAt = null;
+  let _zeroSizeRecoveryPending = false;
+  let _zeroSizeRecoveryGaveUp = false;
+  const ZERO_SIZE_RECOVERY_WINDOW_MS = 20000;
+  const ZERO_SIZE_RECOVERY_BACKOFF_MS = 500;
 
   function _watchForForeignRemoval() {
     const observer = new MutationObserver(() => {
@@ -1204,20 +1216,28 @@
         // node and a zero-size node are the same failure from the user's
         // perspective -- reinsert against whatever the DOM looks like now.
         //
-        // Capped (found live 2026-08-07, same night as the keyboard-submit
-        // runaway): remove() and _armMacroRow() are themselves DOM
-        // mutations, which can refire this exact observer -- if the page
-        // never settles into a state _visualCardHost is happy with, this
-        // would otherwise retry forever and peg the tab. Five attempts is
-        // enough to survive a hydration race; past that, leave it broken
-        // rather than spin.
-        if (_zeroSizeRecoveryAttempts < ZERO_SIZE_RECOVERY_CAP) {
-          _zeroSizeRecoveryAttempts++;
-          macroRow.remove();
-          _armMacroRow();
-        } else if (_zeroSizeRecoveryAttempts === ZERO_SIZE_RECOVERY_CAP) {
-          _zeroSizeRecoveryAttempts++; // only warn once
-          console.warn('[CCT] Macro row stuck at zero size after', ZERO_SIZE_RECOVERY_CAP, 'recovery attempts -- giving up, buttons will not appear on this page load');
+        // remove() and _armMacroRow() are themselves DOM mutations, which
+        // can refire this exact observer -- if the page never settles into
+        // a state _visualCardHost is happy with, this would otherwise
+        // retry forever and peg the tab. Backoff (skip re-attempting while
+        // one is already scheduled) is what actually bounds that, not the
+        // elapsed-time window below -- the window just decides when to
+        // stop trying altogether.
+        if (_zeroSizeRecoveryFirstSeenAt === null) _zeroSizeRecoveryFirstSeenAt = Date.now();
+        const elapsed = Date.now() - _zeroSizeRecoveryFirstSeenAt;
+        if (elapsed >= ZERO_SIZE_RECOVERY_WINDOW_MS) {
+          if (!_zeroSizeRecoveryGaveUp) {
+            _zeroSizeRecoveryGaveUp = true;
+            console.warn('[CCT] Macro row stuck at zero size for', Math.round(elapsed / 1000) + 's', '-- giving up, buttons will not appear on this page load');
+          }
+        } else if (!_zeroSizeRecoveryPending) {
+          _zeroSizeRecoveryPending = true;
+          setTimeout(() => {
+            _zeroSizeRecoveryPending = false;
+            const current = document.getElementById('cct-macro-buttons');
+            if (current) current.remove();
+            _armMacroRow();
+          }, ZERO_SIZE_RECOVERY_BACKOFF_MS);
         }
       }
     });
