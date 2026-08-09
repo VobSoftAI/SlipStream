@@ -274,6 +274,34 @@
     input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
   }
 
+  // Copilot-specific paste path (Tab/Tod-directed diagnostic session,
+  // 2026-08-08/09): the previous approach -- synthetic mousedown/mouseup/
+  // click on the editor, then execCommand('insertText') -- worked when
+  // called from an independent script where the editor was already the
+  // last thing genuinely focused, but silently no-ops when called from
+  // inside the send button's own click handler, where focus is genuinely
+  // on the button at that moment. Instrumented live: _ownSend() DOES
+  // intercept the click and _confirmStampThenSend() DOES run its full
+  // poll loop, but the composer text never changes across any attempt --
+  // Lexical doesn't accept synthetic (untrusted) mouse events as a real
+  // focus/selection change, so execCommand silently writes nowhere
+  // Lexical's own model reconciles. A paste event is a first-class,
+  // framework-recognized input path (Lexical implements paste handling
+  // directly, same reasoning as chatgptPaste above for ChatGPT's picky
+  // editor) and doesn't depend on precisely re-establishing focus first.
+  function copilotPaste(input, text, atStart) {
+    input.focus();
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(input);
+    range.collapse(!!atStart);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const dt = new DataTransfer();
+    dt.setData('text/plain', text);
+    input.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+  }
+
   function injectAndSubmit(text) {
     const input = findInput();
     if (!input) {
@@ -862,17 +890,13 @@
   function _insertAtCursorEdge(text, atStart) {
     const editor = findInput();
     if (!editor) return;
-    // Copilot's editor is Lexical-backed and needs a real click sequence to
-    // establish its internal editing state -- .focus() alone leaves
-    // execCommand('insertText') silently no-op (found live 2026-08-07 via
-    // direct testing: text stayed empty through a full second with focus()
-    // alone, worked once mousedown/mouseup/click were dispatched first).
+    // Copilot/Lexical: paste event, not synthetic-click-then-execCommand
+    // (see copilotPaste's comment for why the old approach silently failed
+    // specifically when called from inside the send button's own click
+    // handler -- found live 2026-08-09).
     if (SITE === 'copilot') {
-      const rect = editor.getBoundingClientRect();
-      const opts = { bubbles: true, cancelable: true, clientX: rect.left + 10, clientY: rect.top + 10 };
-      editor.dispatchEvent(new MouseEvent('mousedown', opts));
-      editor.dispatchEvent(new MouseEvent('mouseup', opts));
-      editor.dispatchEvent(new MouseEvent('click', opts));
+      copilotPaste(editor, text, atStart);
+      return;
     }
     editor.focus();
     const selection = window.getSelection();
@@ -910,7 +934,16 @@
   }
 
   let levelBtns = [];
-  let currentConvId = null;
+  // undefined, not null (found live 2026-08-08 via actual browser testing,
+  // not just reading the code): _resolveVerbosityForConv()'s dedup guard
+  // is `if (convId === currentConvId) return`. A fresh /new page's convId
+  // IS null (extractChatId finds no id), so if this started at null too,
+  // the very first boot call short-circuited before ever reaching the
+  // default-assignment branch -- the row built with no highlight applied,
+  // even though the code reasoning said it should default to Normal.
+  // undefined can never equal what _convId() returns (null or a string),
+  // so the first call always proceeds regardless of what page it lands on.
+  let currentConvId = undefined;
   let currentLevel = null;
   const _stampedThisConv = new Set();
 
@@ -1051,20 +1084,36 @@
     _ownSendInFlight = true;
     e.preventDefault();
     e.stopImmediatePropagation();
-    _confirmStampThenSend();
+    // Deferred one tick (Copilot diagnostic session 2026-08-08/09): both
+    // execCommand('insertText') and a paste event silently no-op when
+    // called synchronously inside this click's own handler -- the button
+    // still genuinely has DOM focus at that instant, and neither approach
+    // can wrest Lexical's internal selection/focus model away from it
+    // mid-dispatch. preventDefault/stopImmediatePropagation still apply
+    // synchronously (that's the part that must happen inline to block the
+    // native submit), but the actual write is pushed to the next tick so
+    // the browser finishes its own click bookkeeping first.
+    setTimeout(() => _confirmStampThenSend(), 0);
   }
 
   // Multi-site (2026-08-07): was Claude-only. findInput/findSubmit are
   // already per-site adapters (see RECEIVER section above), so nothing
   // else here is Claude-specific.
-  document.addEventListener('keydown', (e) => {
+  //
+  // window, not document: harmless either way in the end (the Copilot bug
+  // turned out to be the deferred-write issue above, not listener
+  // ordering -- a red herring from reading extension-isolated-world state
+  // via a plain page-context CDP call during diagnosis), but window is at
+  // least as safe as document for capturing-phase interception, so left
+  // as-is rather than reverting.
+  window.addEventListener('keydown', (e) => {
     if (!e.isTrusted) return; // our own synthetic Enter from _keyboardSendLoop
     if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
     const editor = findInput();
     if (!editor || !editor.contains(e.target)) return;
     _ownSend(e);
   }, true);
-  document.addEventListener('click', (e) => {
+  window.addEventListener('click', (e) => {
     if (!e.isTrusted) return; // our own synthetic click from _doClaudeSend's trySend()
     const sendBtn = findSubmit();
     if (!sendBtn || !sendBtn.contains(e.target)) return;
