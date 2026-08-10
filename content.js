@@ -1053,6 +1053,31 @@
     return text.trimEnd().endsWith(marker);
   }
 
+  // Strips a trailing verbosity stamp (with or without its directive
+  // sentence) so a stranded marker left over from a prior send attempt
+  // doesn't count as user-typed content. Built from all known levels/
+  // directives, not just currentLevel, since the stray text could predate
+  // a level change.
+  function _strippedOfMarker(text) {
+    const levels = VERBOSITY_LEVELS.map(l => l.key).join('|');
+    const directives = Object.values(VERBOSITY_DIRECTIVES)
+      .map(d => d.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const re = new RegExp('(?:\\s*(?:' + directives + '))?\\s*;;verbosity:(?:' + levels + ');;\\s*$');
+    return text.replace(re, '').trim();
+  }
+
+  // Single source of truth for "is there anything the user actually typed"
+  // -- shared by _ownSend's send-interception guard and the macro buttons'
+  // wasEmpty check below, which used to be two separate guards (`!text.trim()`
+  // in the buttons, none at all in _ownSend) that could drift out of sync.
+  function _isEmptyOfUserContent(text) {
+    if (text == null) {
+      const editor = findInput();
+      text = editor ? editor.textContent : '';
+    }
+    return _strippedOfMarker(text).length === 0;
+  }
+
   function _triggerRealSend() {
     if (!_claudeSendScheduled) { _claudeSendScheduled = true; _doClaudeSend(); }
   }
@@ -1077,6 +1102,14 @@
 
   function _ownSend(e) {
     if (_ownSendInFlight) return;
+    // Empty-composer guard (2026-08-10, hit twice live): without this, an
+    // Enter/click on an empty composer still fell through to the stamp step
+    // below, which WROTE the marker -- turning what should have been a
+    // native no-op into a real send whose entire body was the bare stamp.
+    // Must run before preventDefault/stopImmediatePropagation: after those,
+    // the native path they were meant to suppress-and-replace is gone, so
+    // there'd be nothing left to fall back to.
+    if (_isEmptyOfUserContent()) return;
     // currentConvId not required here -- see _stampForSend's comment. A
     // brand-new chat has currentLevel (defaulted) but no convId yet, and
     // that's exactly the message this used to let through unstamped.
@@ -1176,7 +1209,7 @@
           return;
         }
         const existing = findInput()?.textContent || '';
-        const wasEmpty = !existing.trim();
+        const wasEmpty = _isEmptyOfUserContent(existing);
         const label = existing.trim().startsWith('>')
           ? verb + ' the quoted passage: '
           : verb + ': ';
