@@ -1012,14 +1012,24 @@
   function _stampForSend() {
     if (!currentLevel) return;
     const marker = `;;verbosity:${currentLevel};;`;
+    // Newline before the stamp (Tod-ruled 2026-08-10) so it lands on its
+    // own line instead of trailing the last word -- but only when there's
+    // already user content to separate FROM. On an empty composer this
+    // path shouldn't be reachable at all (_ownSend's empty guard returns
+    // before ever calling here), but staying defensive rather than
+    // assuming that invariant holds forever avoids reintroducing a
+    // leading-newline-only send if it ever is.
+    const editor = findInput();
+    const existingText = editor ? editor.textContent : '';
+    const prefix = _isEmptyOfUserContent(existingText) ? '' : '\n';
     if (!currentConvId || !_stampedThisConv.has(currentConvId)) {
       if (currentConvId) {
         _stampedThisConv.add(currentConvId);
         chrome.storage.local.set({ [_keyStamped(currentConvId)]: true }).catch(() => {});
       }
-      _insertAtCursorEdge(' ' + VERBOSITY_DIRECTIVES[currentLevel] + ' ' + marker, false);
+      _insertAtCursorEdge(prefix + ' ' + VERBOSITY_DIRECTIVES[currentLevel] + ' ' + marker, false);
     } else {
-      _insertAtCursorEdge(' ' + marker, false);
+      _insertAtCursorEdge(prefix + ' ' + marker, false);
     }
   }
 
